@@ -17,7 +17,8 @@ const toneTemplates: Record<AnswerTone, { prefix: string; suffix: string }> = {
 
 export const generateAIAnswer = (
   questionContent: string,
-  tone: AnswerTone
+  tone: AnswerTone,
+  referenceMaterials?: string[]
 ): string => {
   const template = toneTemplates[tone];
   
@@ -48,7 +49,17 @@ export const generateAIAnswer = (
       '这是一个很好的问题。根据课程资料中的相关内容，建议你从基础概念入手，逐步理解核心原理。如果需要更深入的解释，可以继续追问，或者老师会在方便时为你详细解答。';
   }
 
-  return template.prefix + answer + template.suffix;
+  let result = template.prefix + answer + template.suffix;
+
+  if (referenceMaterials && referenceMaterials.length > 0) {
+    const shuffled = [...referenceMaterials].sort(() => Math.random() - 0.5);
+    const count = Math.min(Math.floor(Math.random() * 3) + 1, shuffled.length);
+    const selected = shuffled.slice(0, count);
+    const references = '\n\n📚 参考资料：\n' + selected.map(name => `- 《${name}》`).join('\n');
+    result += references;
+  }
+
+  return result;
 };
 
 export const generateComment = (

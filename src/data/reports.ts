@@ -10,6 +10,8 @@ export const reportData: ReportData[] = [
     averageScore: 82.5,
     avgMastery: 67,
     weakPoints: ['装饰器', '闭包', '生成器'],
+    noObviousWeakness: false,
+    learningPoints: ['列表推导式', '异常处理', '作用域'],
     topConfusions: [
       { topic: '装饰器原理', count: 12, percentage: 26.7 },
       { topic: '列表推导式', count: 8, percentage: 17.8 },
@@ -33,8 +35,10 @@ export const reportData: ReportData[] = [
     aiAnsweredRate: 81.3,
     homeworkCompletionRate: 92.1,
     averageScore: 88.0,
-    avgMastery: 75,
-    weakPoints: ['数据清洗', 'pandas', '数据透视表'],
+    avgMastery: 85,
+    weakPoints: [],
+    noObviousWeakness: true,
+    learningPoints: ['分组聚合', '数据合并', '时间序列'],
     topConfusions: [
       { topic: '数据透视表', count: 9, percentage: 28.1 },
       { topic: '分组聚合', count: 7, percentage: 21.9 },
@@ -57,8 +61,10 @@ export const reportData: ReportData[] = [
     aiAnsweredRate: 68.9,
     homeworkCompletionRate: 76.9,
     averageScore: 79.3,
-    avgMastery: 58,
-    weakPoints: ['闭包', '原型链', '异步编程'],
+    avgMastery: 62,
+    weakPoints: [],
+    noObviousWeakness: false,
+    learningPoints: ['闭包', '原型链', '异步编程', 'Flex 布局', 'React Hooks', 'DOM 操作'],
     topConfusions: [
       { topic: '闭包', count: 15, percentage: 25.9 },
       { topic: '原型链', count: 12, percentage: 20.7 },
@@ -84,6 +90,8 @@ export const reportData: ReportData[] = [
     averageScore: 85.7,
     avgMastery: 80,
     weakPoints: ['多表连接', '索引优化', '事务隔离'],
+    noObviousWeakness: false,
+    learningPoints: ['子查询', '范式理论', 'SQL 优化'],
     topConfusions: [
       { topic: '多表连接', count: 8, percentage: 28.6 },
       { topic: '索引优化', count: 6, percentage: 21.4 },
@@ -108,6 +116,8 @@ export const reportData: ReportData[] = [
     averageScore: 72.8,
     avgMastery: 52,
     weakPoints: ['快速排序', '动态规划', '分治算法'],
+    noObviousWeakness: false,
+    learningPoints: ['二叉树遍历', '递归回溯', '排序算法'],
     topConfusions: [
       { topic: '动态规划', count: 12, percentage: 34.3 },
       { topic: '递归回溯', count: 9, percentage: 25.7 },

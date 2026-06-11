@@ -16,7 +16,7 @@ import {
 import type { AnswerTone } from '../../types';
 
 const SettingsPage = () => {
-  const { settings, setAnswerTone, toggleContentFilter, toggleAutoAnswer } = useAppStore();
+  const { settings, setAnswerTone, toggleContentFilter, toggleAutoAnswer, addBlockedKeyword, removeBlockedKeyword } = useAppStore();
   const [newKeyword, setNewKeyword] = useState('');
 
   const toneOptions: { value: AnswerTone; label: string; desc: string; icon: string }[] = [
@@ -27,14 +27,13 @@ const SettingsPage = () => {
 
   const handleAddKeyword = () => {
     if (newKeyword.trim() && !settings.blockedKeywords.includes(newKeyword.trim())) {
-      setAnswerTone;
+      addBlockedKeyword(newKeyword.trim());
       setNewKeyword('');
     }
   };
 
   const handleRemoveKeyword = (keyword: string) => {
-    // 简单实现，实际应该有对应的 action
-    console.log('Remove keyword:', keyword);
+    removeBlockedKeyword(keyword);
   };
 
   return (
@@ -139,7 +138,7 @@ const SettingsPage = () => {
             {settings.contentFilterEnabled && (
               <div className="mt-5 pt-5 border-t border-slate-100">
                 <p className="text-sm text-slate-600 mb-3">屏蔽关键词列表</p>
-                <div className="flex flex-wrap gap-2 mb-4">
+                <div className="flex flex-wrap gap-2 mb-3">
                   {settings.blockedKeywords.map((keyword) => (
                     <span
                       key={keyword}
@@ -148,13 +147,16 @@ const SettingsPage = () => {
                       {keyword}
                       <button
                         onClick={() => handleRemoveKeyword(keyword)}
-                        className="hover:bg-danger-100 rounded p-0.5 transition-colors"
+                        className="hover:bg-danger-200 hover:text-danger-800 rounded p-0.5 transition-colors"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </span>
                   ))}
                 </div>
+                <p className="text-xs text-slate-400 mb-4">
+                  新增关键词后，提问广场开启内容过滤时会自动屏蔽包含这些关键词的问题；删除后刷新页面仍生效
+                </p>
                 <div className="flex gap-2">
                   <input
                     type="text"

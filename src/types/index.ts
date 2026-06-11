@@ -49,6 +49,7 @@ export interface ChatMessage {
   createdAt: string;
   authorName?: string;
   tone?: AnswerTone;
+  references?: string[];
 }
 
 export interface Question {
@@ -133,6 +134,8 @@ export interface ReportData {
   studentProgress: StudentProgress[];
   weakPoints: string[];
   avgMastery: number;
+  noObviousWeakness: boolean;
+  learningPoints: string[];
 }
 
 export interface Settings {
@@ -141,4 +144,44 @@ export interface Settings {
   blockedKeywords: string[];
   autoAnswerEnabled: boolean;
   teacherName: string;
+}
+
+export type RecommendReason = 'weak_point' | 'recent_question' | 'homework_mistake' | 'forgotten';
+
+export interface RecommendedFlashcard {
+  flashcard: Flashcard;
+  reasons: RecommendReason[];
+  priority: number;
+}
+
+export type GuidanceRecordType = 'review' | 'qa_help' | 'homework_comment' | 'one_on_one';
+
+export interface GuidanceRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  courseId: string;
+  courseName: string;
+  type: GuidanceRecordType;
+  content: string;
+  relatedFlashcardIds?: string[];
+  relatedQuestionId?: string;
+  relatedSubmissionId?: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface HomeworkMistake {
+  studentId: string;
+  homeworkId: string;
+  knowledgePoints: string[];
+  description: string;
+}
+
+export interface Student {
+  id: string;
+  name: string;
+  courseIds: string[];
+  avatar?: string;
+  lastQuestionAt?: string;
 }

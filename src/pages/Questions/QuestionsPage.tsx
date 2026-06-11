@@ -22,6 +22,7 @@ import {
   CheckCircle,
   FileText,
   ArrowLeftRight,
+  BookOpen,
 } from 'lucide-react';
 import type { AnswerTone, ChatMessage, MessageRole } from '../../types';
 
@@ -166,6 +167,23 @@ const QuestionsPage = () => {
             }`}
           >
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+            {msg.role === 'ai' && msg.references && msg.references.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <div className="flex items-start gap-2 text-xs text-primary-600">
+                  <BookOpen className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium mb-1 text-primary-700">📚 参考资料：</p>
+                    <ul className="space-y-1">
+                      {msg.references.map((ref, idx) => (
+                        <li key={idx} className="text-primary-600 bg-primary-50 px-2 py-1 rounded inline-flex mr-2 mb-1">
+                          《{ref}》
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

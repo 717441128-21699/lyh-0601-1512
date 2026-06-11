@@ -20,11 +20,28 @@ import {
   ChevronUp,
   Award,
   TrendingDown,
+  UserCheck,
+  BookMarked,
+  History,
+  Target,
+  AlertOctagon,
+  FileQuestion,
+  CheckSquare,
+  Lightbulb,
 } from 'lucide-react';
-import type { MasteryLevel, Flashcard, Question } from '../../types';
+import type {
+  MasteryLevel,
+  Flashcard,
+  Question,
+  Student,
+  RecommendedFlashcard,
+  RecommendReason,
+  GuidanceRecord,
+  GuidanceRecordType,
+} from '../../types';
 import { getMasteryLabel, calculateMasteryColor, formatDate } from '../../utils/ai';
 
-type TabType = 'cards' | 'starred';
+type TabType = 'cards' | 'starred' | 'student_review';
 
 const FlashcardsPage = () => {
   const {
@@ -36,6 +53,10 @@ const FlashcardsPage = () => {
     getRecommendedFlashcards,
     toggleQuestionStar,
     convertQuestionToFlashcard,
+    students,
+    guidanceRecords,
+    getStudentRecommendations,
+    markStudentReviewComplete,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('cards');
@@ -48,9 +69,97 @@ const FlashcardsPage = () => {
   const [selectedCard, setSelectedCard] = useState<Flashcard | null>(null);
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
   const [convertSuccess, setConvertSuccess] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  const [studentCourseFilter, setStudentCourseFilter] = useState<string>('all');
+  const [completedReviews, setCompletedReviews] = useState<Set<string>>(new Set());
 
   const recommendedCards = getRecommendedFlashcards();
   const starredQuestions = questions.filter((q) => q.isStarred && !q.isBlocked);
+
+  const selectedStudent = useMemo(
+    () => students.find((s) => s.id === selectedStudentId),
+    [students, selectedStudentId]
+  );
+
+  const studentCourses = useMemo(() => {
+    if (!selectedStudent) return courses;
+    return courses.filter((c) => selectedStudent.courseIds.includes(c.id));
+  }, [selectedStudent, courses]);
+
+  const studentRecommendations = useMemo(() => {
+    if (!selectedStudentId) return [];
+    const courseId = studentCourseFilter !== 'all' ? studentCourseFilter : undefined;
+    return getStudentRecommendations(selectedStudentId, courseId);
+  }, [selectedStudentId, studentCourseFilter, getStudentRecommendations]);
+
+  const studentGuidanceRecords = useMemo(() => {
+    if (!selectedStudentId) return [];
+    return guidanceRecords
+      .filter((r) => r.studentId === selectedStudentId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [guidanceRecords, selectedStudentId]);
+
+  const recommendReasonConfig: Record<RecommendReason, { label: string; desc: string; color: string; bgColor: string; borderColor: string; icon: any }> = {
+    weak_point: {
+      label: '薄弱点',
+      desc: '该学生此知识点薄弱',
+      color: 'text-red-700',
+      bgColor: 'bg-red-50',
+      borderColor: 'border-red-200',
+      icon: AlertOctagon,
+    },
+    recent_question: {
+      label: '最近追问',
+      desc: '该学生最近问过相关问题',
+      color: 'text-purple-700',
+      bgColor: 'bg-purple-50',
+      borderColor: 'border-purple-200',
+      icon: MessageSquare,
+    },
+    homework_mistake: {
+      label: '作业错点',
+      desc: '作业中此知识点答错',
+      color: 'text-orange-700',
+      bgColor: 'bg-orange-50',
+      borderColor: 'border-orange-200',
+      icon: FileQuestion,
+    },
+    forgotten: {
+      label: '遗忘提醒',
+      desc: '超过7天未复习，可能已遗忘',
+      color: 'text-slate-600',
+      bgColor: 'bg-slate-100',
+      borderColor: 'border-slate-300',
+      icon: Clock,
+    },
+  };
+
+  const guidanceTypeConfig: Record<GuidanceRecordType, { label: string; icon: any; color: string; bgColor: string }> = {
+    review: {
+      label: '复习完成',
+      icon: CheckSquare,
+      color: 'text-success-600',
+      bgColor: 'bg-success-100',
+    },
+    qa_help: {
+      label: '问答辅导',
+      icon: MessageSquare,
+      color: 'text-primary-600',
+      bgColor: 'bg-primary-100',
+    },
+    homework_comment: {
+      label: '作业批改',
+      icon: BookMarked,
+      color: 'text-accent-600',
+      bgColor: 'bg-accent-100',
+    },
+    one_on_one: {
+      label: '一对一',
+      icon: UserCheck,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100',
+    },
+  };
 
   const allKnowledgePoints = useMemo(() => {
     const kps = new Set<string>();
@@ -109,6 +218,12 @@ const FlashcardsPage = () => {
     }
   };
 
+  const handleStudentReview = (flashcardId: string, masteryLevel: MasteryLevel) => {
+    if (!selectedStudentId) return;
+    markStudentReviewComplete(selectedStudentId, flashcardId, masteryLevel);
+    setCompletedReviews((prev) => new Set(prev).add(flashcardId));
+  };
+
   const masteryOptions: { value: MasteryLevel | 'all'; label: string; color: string }[] = [
     { value: 'all', label: '全部', color: 'bg-slate-500' },
     { value: 'mastered', label: '已掌握', color: 'bg-success-500' },
@@ -123,6 +238,7 @@ const FlashcardsPage = () => {
     learning: flashcards.filter((f) => f.masteryLevel === 'learning').length,
     weak: flashcards.filter((f) => f.masteryLevel === 'weak').length,
     starred: starredQuestions.length,
+    students: students.length,
   };
 
   const weakCards = flashcards.filter((f) => f.masteryLevel === 'weak');
@@ -147,6 +263,7 @@ const FlashcardsPage = () => {
           {[
             { key: 'cards', label: '知识卡片', icon: Layers, count: stats.total },
             { key: 'starred', label: '优秀问答库', icon: Star, count: stats.starred },
+            { key: 'student_review', label: '学生复习', icon: UserCheck, count: stats.students },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -539,6 +656,245 @@ const FlashcardsPage = () => {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {activeTab === 'student_review' && (
+          <div className="space-y-6 animate-stagger">
+            <div className="card p-5">
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+                <div className="flex-1 w-full">
+                  <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-primary-600" />
+                    选择学生
+                  </label>
+                  <select
+                    value={selectedStudentId}
+                    onChange={(e) => {
+                      setSelectedStudentId(e.target.value);
+                      setStudentCourseFilter('all');
+                      setCompletedReviews(new Set());
+                    }}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm
+                               focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">请选择学生</option>
+                    {students.map((stu) => (
+                      <option key={stu.id} value={stu.id}>
+                        {stu.name}（参与 {stu.courseIds.length} 门课程）
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1 w-full">
+                  <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                    <BookMarked className="w-4 h-4 text-accent-600" />
+                    课程筛选
+                  </label>
+                  <select
+                    value={studentCourseFilter}
+                    onChange={(e) => setStudentCourseFilter(e.target.value)}
+                    disabled={!selectedStudentId}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm
+                               focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-slate-50 disabled:text-slate-400"
+                  >
+                    <option value="all">全部课程</option>
+                    {studentCourses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {!selectedStudentId ? (
+              <div className="text-center py-16 card">
+                <Target className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500">请先选择一名学生</p>
+                <p className="text-sm text-slate-400 mt-1">选择学生后将显示该学生的个性化复习队列</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white font-medium">
+                        {selectedStudent?.name[0]}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                          <Lightbulb className="w-4 h-4 text-accent-500" />
+                          推荐复习队列
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          共 {studentRecommendations.length} 张推荐卡片
+                          {completedReviews.size > 0 && `，已完成 ${completedReviews.size} 张`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {studentRecommendations.length === 0 ? (
+                    <div className="text-center py-12 card">
+                      <Sparkles className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-slate-500">暂无推荐复习内容</p>
+                      <p className="text-sm text-slate-400 mt-1">该学生在当前条件下没有需要复习的卡片</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {studentRecommendations.map((rec, index) => {
+                        const card = rec.flashcard;
+                        const isCompleted = completedReviews.has(card.id);
+                        return (
+                          <div
+                            key={card.id}
+                            style={{ animationDelay: `${index * 0.05}s` }}
+                            className={`card p-5 transition-all ${
+                              isCompleted ? 'bg-success-50 border-success-200' : ''
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div>
+                                <span className="text-xs text-slate-400">{card.courseName}</span>
+                                {isCompleted && (
+                                  <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-success-100 text-success-700 text-xs font-medium rounded-full">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    已完成
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                className={`w-2.5 h-2.5 rounded-full ${calculateMasteryColor(
+                                  card.masteryLevel
+                                )}`}
+                              />
+                            </div>
+
+                            <h4 className="font-serif font-semibold text-lg text-slate-800 mb-2">
+                              {card.knowledgePoints[0] || '知识点'}
+                            </h4>
+                            <p className="text-slate-600 text-sm mb-4 line-clamp-3">{card.front}</p>
+
+                            <div className="flex flex-wrap gap-2 mb-4">
+                              {rec.reasons.map((reason) => {
+                                const cfg = recommendReasonConfig[reason];
+                                const ReasonIcon = cfg.icon;
+                                return (
+                                  <div
+                                    key={reason}
+                                    className={`flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg border ${cfg.bgColor} ${cfg.borderColor}`}
+                                  >
+                                    <ReasonIcon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${cfg.color}`} />
+                                    <div>
+                                      <span className={`text-xs font-medium ${cfg.color}`}>
+                                        {cfg.label}
+                                      </span>
+                                      <p className={`text-[11px] ${cfg.color} opacity-80 mt-0.5`}>
+                                        {cfg.desc}
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className={`flex gap-2 ${isCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
+                              <button
+                                onClick={() => handleStudentReview(card.id, 'weak')}
+                                disabled={isCompleted}
+                                className="flex-1 py-2 px-3 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-lg transition-colors border border-red-200 disabled:cursor-not-allowed"
+                              >
+                                没记住
+                              </button>
+                              <button
+                                onClick={() => handleStudentReview(card.id, 'learning')}
+                                disabled={isCompleted}
+                                className="flex-1 py-2 px-3 bg-warning-50 hover:bg-warning-100 text-warning-600 text-sm font-medium rounded-lg transition-colors border border-warning-200 disabled:cursor-not-allowed"
+                              >
+                                模糊
+                              </button>
+                              <button
+                                onClick={() => handleStudentReview(card.id, 'mastered')}
+                                disabled={isCompleted}
+                                className="flex-1 py-2 px-3 bg-success-50 hover:bg-success-100 text-success-600 text-sm font-medium rounded-lg transition-colors border border-success-200 disabled:cursor-not-allowed"
+                              >
+                                记住了
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-gradient-to-br from-accent-400 to-accent-600 rounded-xl flex items-center justify-center">
+                      <History className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-800">该学生辅导记录</h3>
+                      <p className="text-sm text-slate-500">
+                        共 {studentGuidanceRecords.length} 条记录，按时间倒序排列
+                      </p>
+                    </div>
+                  </div>
+
+                  {studentGuidanceRecords.length === 0 ? (
+                    <div className="text-center py-12 card">
+                      <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-slate-500">暂无辅导记录</p>
+                    </div>
+                  ) : (
+                    <div className="card p-5">
+                      <div className="relative">
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-200" />
+                        <div className="space-y-6">
+                          {studentGuidanceRecords.map((record) => {
+                            const typeCfg = guidanceTypeConfig[record.type];
+                            const TypeIcon = typeCfg.icon;
+                            return (
+                              <div key={record.id} className="relative pl-12">
+                                <div
+                                  className={`absolute left-0 w-8 h-8 rounded-full ${typeCfg.bgColor} flex items-center justify-center ring-4 ring-white`}
+                                >
+                                  <TypeIcon className={`w-4 h-4 ${typeCfg.color}`} />
+                                </div>
+                                <div className="bg-slate-50 rounded-xl p-4">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`px-2 py-0.5 text-xs font-medium rounded-full ${typeCfg.bgColor} ${typeCfg.color}`}
+                                      >
+                                        {typeCfg.label}
+                                      </span>
+                                      <span className="text-xs text-slate-400">
+                                        {record.courseName}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      {record.createdAt}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-slate-700">{record.content}</p>
+                                  <p className="text-xs text-slate-400 mt-2">
+                                    操作人：{record.createdBy}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 
