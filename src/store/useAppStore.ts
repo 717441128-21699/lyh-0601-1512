@@ -17,6 +17,9 @@ import type {
   RecommendReason,
   GuidanceRecord,
   GuidanceRecordType,
+  ReviewPlan,
+  ReviewPlanItem,
+  ReferenceDetail,
 } from '../types';
 import { courses } from '../data/courses';
 import { questions as initialQuestions } from '../data/questions';
@@ -25,7 +28,7 @@ import { flashcards as initialFlashcards } from '../data/flashcards';
 import { reportData as initialReportData, defaultSettings } from '../data/reports';
 import { students as initialStudents } from '../data/students';
 import { guidanceRecords as initialGuidanceRecords } from '../data/guidanceRecords';
-import { generateAIAnswer, generateComment, generateRecommendations } from '../utils/ai';
+import { generateAIAnswer, generateComment, generateRecommendations, generateMaterialExcerpts } from '../utils/ai';
 
 interface AppState {
   courses: Course[];
@@ -37,6 +40,7 @@ interface AppState {
   settings: Settings;
   students: Student[];
   guidanceRecords: GuidanceRecord[];
+  reviewPlans: ReviewPlan[];
 
   selectedCourseId: string | null;
   setSelectedCourseId: (id: string | null) => void;
@@ -77,9 +81,13 @@ interface AppState {
   getSubmissionsByHomework: (homeworkId: string) => Submission[];
   getReportByCourse: (courseId: string) => ReportData | undefined;
   refreshReportWeakPoints: (courseId: string) => void;
+  refreshAllReportWeakPoints: () => void;
 
   getStudentRecommendations: (studentId: string, courseId?: string) => RecommendedFlashcard[];
   markStudentReviewComplete: (studentId: string, flashcardId: string, masteryLevel: MasteryLevel) => void;
+
+  generateWeeklyPlan: (studentId: string) => ReviewPlan | null;
+  completePlanItem: (planId: string, itemId: string, masteryLevel: MasteryLevel) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -92,6 +100,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settings: defaultSettings,
   students: initialStudents,
   guidanceRecords: initialGuidanceRecords,
+  reviewPlans: [],
 
   selectedCourseId: null,
   setSelectedCourseId: (id) => set({ selectedCourseId: id }),
@@ -102,12 +111,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   toggleContentFilter: () =>
-    set((state) => ({
-      settings: {
-        ...state.settings,
-        contentFilterEnabled: !state.settings.contentFilterEnabled,
-      },
-    })),
+    set((state) => {
+      const newEnabled = !state.settings.contentFilterEnabled;
+      let questions = state.questions;
+      if (newEnabled) {
+        questions = state.questions.map((q) => {
+          if (state.settings.blockedKeywords.some((kw) => q.content.toLowerCase().includes(kw.toLowerCase()))) {
+            return { ...q, isBlocked: true, status: 'blocked' as const };
+          }
+          return q;
+        });
+      } else {
+        questions = state.questions.map((q) => {
+          if (q.isBlocked) {
+            const hasReply = q.messages.filter((m) => m.role !== 'student').length > 0;
+            return { ...q, isBlocked: false, status: hasReply ? ('ai_answered' as const) : ('pending' as const) };
+          }
+          return q;
+        });
+      }
+      return {
+        settings: { ...state.settings, contentFilterEnabled: newEnabled },
+        questions,
+      };
+    }),
 
   toggleAutoAnswer: () =>
     set((state) => ({
@@ -121,6 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       if (state.settings.blockedKeywords.includes(keyword)) return {};
       const newBlocked = [...state.settings.blockedKeywords, keyword];
+      localStorage.setItem('ai-assistant-blocked-keywords', JSON.stringify(newBlocked));
       const shouldBlock = (q: Question) =>
         newBlocked.some((kw) => q.content.toLowerCase().includes(kw.toLowerCase()));
       return {
@@ -136,6 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeBlockedKeyword: (keyword) =>
     set((state) => {
       const newBlocked = state.settings.blockedKeywords.filter((k) => k !== keyword);
+      localStorage.setItem('ai-assistant-blocked-keywords', JSON.stringify(newBlocked));
       const shouldUnblock = (q: Question) =>
         q.content.toLowerCase().includes(keyword.toLowerCase()) &&
         q.isBlocked &&
@@ -231,16 +260,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!question) return;
 
     const course = state.courses.find((c) => c.id === question.courseId);
-    const readyMaterials = course?.materialList
-      .filter((m) => m.status === 'ready')
-      .map((m) => m.name) || [];
+    const readyMaterialObjects = course?.materialList
+      .filter((m) => m.status === 'ready') || [];
+    const readyMaterialNames = readyMaterialObjects.map((m) => m.name);
 
     const lastStudentMsg = [...question.messages].reverse().find((m) => m.role === 'student');
+    const questionContent = lastStudentMsg?.content || question.content;
+
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const newMaterialNames = readyMaterialObjects
+      .filter((m) => m.processedAt && new Date(m.processedAt) > sevenDaysAgo)
+      .map((m) => m.name);
+
     const answerContent = generateAIAnswer(
-      lastStudentMsg?.content || question.content,
+      questionContent,
       state.settings.answerTone,
-      readyMaterials
+      readyMaterialNames,
+      newMaterialNames
     );
+
+    const referenceDetails: ReferenceDetail[] = readyMaterialObjects.map((m) => ({
+      name: m.name,
+      excerpts: generateMaterialExcerpts(m.name, questionContent),
+      isNew: m.processedAt ? new Date(m.processedAt) > sevenDaysAgo : false,
+    }));
+
+    const selectedRefs = readyMaterialNames.length > 0
+      ? [...readyMaterialNames].sort(() => Math.random() - 0.5).slice(0, 3)
+      : undefined;
 
     const newMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -249,7 +298,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       content: answerContent,
       createdAt: new Date().toLocaleString('zh-CN'),
       tone: state.settings.answerTone,
-      references: readyMaterials.length > 0 ? [...readyMaterials].sort(() => Math.random() - 0.5).slice(0, 3) : undefined,
+      references: selectedRefs,
+      referenceDetails: referenceDetails.length > 0 ? referenceDetails : undefined,
     };
 
     set((s) => ({
@@ -585,5 +635,123 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     get().refreshReportWeakPoints(card.courseId);
+  },
+
+  generateWeeklyPlan: (studentId) => {
+    const state = get();
+    const student = state.students.find((s) => s.id === studentId);
+    if (!student) return null;
+
+    const recommendations = state.getStudentRecommendations(studentId);
+    if (recommendations.length === 0) return null;
+
+    const studentCourses = state.courses.filter((c) => student.courseIds.includes(c.id));
+
+    const courseMap = new Map(studentCourses.map((c) => [c.id, c.name]));
+
+    const courseGroups = new Map<string, RecommendedFlashcard[]>();
+    for (const rec of recommendations) {
+      const cid = rec.flashcard.courseId;
+      if (!courseGroups.has(cid)) {
+        courseGroups.set(cid, []);
+      }
+      courseGroups.get(cid)!.push(rec);
+    }
+
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayOffset);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    const formatDateStr = (d: Date) => d.toISOString().split('T')[0];
+
+    const courseIds = Array.from(courseGroups.keys());
+    const items: ReviewPlanItem[] = [];
+
+    for (const cid of courseIds) {
+      const recs = courseGroups.get(cid)!;
+      const courseIdx = courseIds.indexOf(cid);
+      const daysOffset = 3 + courseIdx;
+      const deadline = new Date(now);
+      deadline.setDate(now.getDate() + daysOffset);
+
+      for (const rec of recs) {
+        const idx = items.length;
+        items.push({
+          id: `plan-item-${Date.now()}-${idx}`,
+          flashcardId: rec.flashcard.id,
+          courseId: cid,
+          courseName: courseMap.get(cid) || rec.flashcard.courseName,
+          knowledgePoint: rec.flashcard.knowledgePoints[0] || '知识点',
+          priority: rec.priority,
+          deadline: formatDateStr(deadline),
+          completed: false,
+        });
+      }
+    }
+
+    const plan: ReviewPlan = {
+      id: `plan-${Date.now()}`,
+      studentId,
+      studentName: student.name,
+      items,
+      createdAt: new Date().toLocaleString('zh-CN'),
+      weekStart: formatDateStr(monday),
+      weekEnd: formatDateStr(sunday),
+      completedCount: 0,
+      totalCount: items.length,
+    };
+
+    set((s) => ({
+      reviewPlans: [...s.reviewPlans, plan],
+    }));
+
+    return plan;
+  },
+
+  completePlanItem: (planId, itemId, masteryLevel) => {
+    set((state) => {
+      const plan = state.reviewPlans.find((p) => p.id === planId);
+      if (!plan) return {};
+
+      const item = plan.items.find((i) => i.id === itemId);
+      if (!item || item.completed) return {};
+
+      const now = new Date().toLocaleString('zh-CN');
+      const newCompletedCount = plan.completedCount + 1;
+
+      return {
+        reviewPlans: state.reviewPlans.map((p) =>
+          p.id === planId
+            ? {
+                ...p,
+                items: p.items.map((i) =>
+                  i.id === itemId
+                    ? { ...i, completed: true, completedAt: now, masteryLevel }
+                    : i
+                ),
+                completedCount: newCompletedCount,
+              }
+            : p
+        ),
+      };
+    });
+
+    const plan = get().reviewPlans.find((p) => p.id === planId);
+    const item = plan?.items.find((i) => i.id === itemId);
+    if (plan && item) {
+      get().markStudentReviewComplete(plan.studentId, item.flashcardId, masteryLevel);
+    }
+  },
+
+  refreshAllReportWeakPoints: () => {
+    const state = get();
+    const courseIds = state.reportData.map((r) => r.courseId);
+    for (const courseId of courseIds) {
+      get().refreshReportWeakPoints(courseId);
+    }
   },
 }));

@@ -28,6 +28,10 @@ import {
   FileQuestion,
   CheckSquare,
   Lightbulb,
+  Calendar,
+  ListChecks,
+  Play,
+  CheckCircle,
 } from 'lucide-react';
 import type {
   MasteryLevel,
@@ -38,6 +42,8 @@ import type {
   RecommendReason,
   GuidanceRecord,
   GuidanceRecordType,
+  ReviewPlan,
+  ReviewPlanItem,
 } from '../../types';
 import { getMasteryLabel, calculateMasteryColor, formatDate } from '../../utils/ai';
 
@@ -57,6 +63,9 @@ const FlashcardsPage = () => {
     guidanceRecords,
     getStudentRecommendations,
     markStudentReviewComplete,
+    reviewPlans,
+    generateWeeklyPlan,
+    completePlanItem,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('cards');
@@ -98,6 +107,37 @@ const FlashcardsPage = () => {
       .filter((r) => r.studentId === selectedStudentId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [guidanceRecords, selectedStudentId]);
+
+  const currentPlan = useMemo<ReviewPlan | undefined>(
+    () => reviewPlans.find((p) => p.studentId === selectedStudentId),
+    [reviewPlans, selectedStudentId]
+  );
+
+  const groupedPlanItems = useMemo(() => {
+    if (!currentPlan) return [];
+    const map = new Map<string, { courseName: string; items: ReviewPlanItem[] }>();
+    currentPlan.items.forEach((item) => {
+      const group = map.get(item.courseId) || { courseName: item.courseName, items: [] };
+      group.items.push(item);
+      map.set(item.courseId, group);
+    });
+    return Array.from(map.entries()).map(([courseId, group]) => ({ courseId, ...group }));
+  }, [currentPlan]);
+
+  const getDeadlineStyle = (deadline: string) => {
+    const daysLeft = Math.ceil(
+      (new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    );
+    if (daysLeft <= 1) return { color: 'text-red-600', bg: 'bg-red-50', label: '紧迫' };
+    if (daysLeft <= 3) return { color: 'text-yellow-600', bg: 'bg-yellow-50', label: '一般' };
+    return { color: 'text-green-600', bg: 'bg-green-50', label: '充裕' };
+  };
+
+  const getPriorityLabel = (priority: number) => {
+    if (priority >= 3) return { label: '高', color: 'text-red-600', bg: 'bg-red-50' };
+    if (priority >= 2) return { label: '中', color: 'text-yellow-600', bg: 'bg-yellow-50' };
+    return { label: '低', color: 'text-slate-500', bg: 'bg-slate-50' };
+  };
 
   const recommendReasonConfig: Record<RecommendReason, { label: string; desc: string; color: string; bgColor: string; borderColor: string; icon: any }> = {
     weak_point: {
@@ -717,6 +757,163 @@ const FlashcardsPage = () => {
               </div>
             ) : (
               <>
+                {!currentPlan ? (
+                  <div className="card p-6 text-center">
+                    <Calendar className="w-12 h-12 text-primary-300 mx-auto mb-3" />
+                    <p className="text-slate-600 font-medium mb-2">该学生暂无一周复习计划</p>
+                    <p className="text-sm text-slate-400 mb-4">点击下方按钮，为该学生智能生成一周复习计划</p>
+                    <button
+                      onClick={() => generateWeeklyPlan(selectedStudentId)}
+                      className="btn-primary inline-flex items-center gap-2"
+                    >
+                      <Calendar className="w-4 h-4" />
+                      生成一周复习计划
+                    </button>
+                  </div>
+                ) : (
+                  <div className="card p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-accent-500 rounded-xl flex items-center justify-center">
+                          <ListChecks className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-slate-800">一周复习计划</h3>
+                          <p className="text-sm text-slate-500">
+                            {currentPlan.weekStart} ~ {currentPlan.weekEnd}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-primary-600">
+                          {Math.round((currentPlan.completedCount / currentPlan.totalCount) * 100)}%
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {currentPlan.completedCount}/{currentPlan.totalCount} 已完成
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="w-full bg-slate-100 rounded-full h-2.5 mb-5">
+                      <div
+                        className="bg-gradient-to-r from-primary-500 to-accent-500 h-2.5 rounded-full transition-all duration-500"
+                        style={{
+                          width: `${(currentPlan.completedCount / currentPlan.totalCount) * 100}%`,
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-5">
+                      {groupedPlanItems.map((group) => (
+                        <div key={group.courseId}>
+                          <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                            <BookOpen className="w-4 h-4 text-primary-500" />
+                            {group.courseName}
+                            <span className="text-xs text-slate-400 font-normal">
+                              ({group.items.length} 张卡片)
+                            </span>
+                          </h4>
+                          <div className="space-y-2.5">
+                            {group.items.map((item) => {
+                              const deadlineStyle = getDeadlineStyle(item.deadline);
+                              const priorityCfg = getPriorityLabel(item.priority);
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={`rounded-xl p-4 border transition-all ${
+                                    item.completed
+                                      ? 'bg-success-50 border-success-200'
+                                      : 'bg-white border-slate-200 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-medium text-slate-800 text-sm">
+                                        {item.knowledgePoint}
+                                      </span>
+                                      <span
+                                        className={`px-2 py-0.5 text-xs font-medium rounded-full ${priorityCfg.bg} ${priorityCfg.color}`}
+                                      >
+                                        {priorityCfg.label}优先
+                                      </span>
+                                      {!item.completed && (
+                                        <span
+                                          className={`px-2 py-0.5 text-xs rounded-full ${deadlineStyle.bg} ${deadlineStyle.color}`}
+                                        >
+                                          {deadlineStyle.label} · {item.deadline}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {item.completed && (
+                                      <CheckCircle className="w-5 h-5 text-success-500 flex-shrink-0" />
+                                    )}
+                                  </div>
+
+                                  {item.completed ? (
+                                    <div className="flex items-center gap-3 text-xs text-slate-500">
+                                      <span
+                                        className={`px-2 py-0.5 rounded-full ${
+                                          item.masteryLevel === 'mastered'
+                                            ? 'bg-success-100 text-success-700'
+                                            : item.masteryLevel === 'learning'
+                                              ? 'bg-primary-100 text-primary-700'
+                                              : 'bg-warning-100 text-warning-700'
+                                        }`}
+                                      >
+                                        {item.masteryLevel === 'mastered'
+                                          ? '记住了'
+                                          : item.masteryLevel === 'learning'
+                                            ? '模糊'
+                                            : '没记住'}
+                                      </span>
+                                      <span>完成于 {item.completedAt}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex gap-2 mt-2">
+                                      <button
+                                        onClick={() =>
+                                          completePlanItem(currentPlan.id, item.id, 'weak')
+                                        }
+                                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-lg transition-colors border border-red-200"
+                                      >
+                                        没记住
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          completePlanItem(currentPlan.id, item.id, 'learning')
+                                        }
+                                        className="px-3 py-1.5 bg-yellow-50 hover:bg-yellow-100 text-yellow-600 text-sm font-medium rounded-lg transition-colors border border-yellow-200"
+                                      >
+                                        模糊
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          completePlanItem(currentPlan.id, item.id, 'mastered')
+                                        }
+                                        className="px-3 py-1.5 bg-success-50 hover:bg-success-100 text-success-600 text-sm font-medium rounded-lg transition-colors border border-success-200"
+                                      >
+                                        记住了
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {currentPlan.completedCount === currentPlan.totalCount && (
+                      <div className="mt-5 text-center py-4 bg-gradient-to-r from-accent-50 to-primary-50 rounded-xl border border-accent-200/50">
+                        <p className="text-lg font-semibold text-slate-800">
+                          🎉 一周复习计划已全部完成！
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">

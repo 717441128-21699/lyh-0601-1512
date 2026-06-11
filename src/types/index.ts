@@ -41,6 +41,12 @@ export interface Course {
   className: string;
 }
 
+export interface ReferenceDetail {
+  name: string;
+  excerpts: string[];
+  isNew?: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   questionId: string;
@@ -50,6 +56,7 @@ export interface ChatMessage {
   authorName?: string;
   tone?: AnswerTone;
   references?: string[];
+  referenceDetails?: ReferenceDetail[];
 }
 
 export interface Question {
@@ -184,4 +191,29 @@ export interface Student {
   courseIds: string[];
   avatar?: string;
   lastQuestionAt?: string;
+}
+
+export interface ReviewPlanItem {
+  id: string;
+  flashcardId: string;
+  courseId: string;
+  courseName: string;
+  knowledgePoint: string;
+  priority: number;
+  deadline: string;
+  completed: boolean;
+  completedAt?: string;
+  masteryLevel?: MasteryLevel;
+}
+
+export interface ReviewPlan {
+  id: string;
+  studentId: string;
+  studentName: string;
+  items: ReviewPlanItem[];
+  createdAt: string;
+  weekStart: string;
+  weekEnd: string;
+  completedCount: number;
+  totalCount: number;
 }

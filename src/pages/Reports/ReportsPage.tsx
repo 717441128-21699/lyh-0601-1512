@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout/Layout';
 import { useAppStore } from '../../store/useAppStore';
 import {
@@ -22,9 +22,13 @@ import { exportToText, copyToClipboard } from '../../utils/ai';
 import type { StudentProgress } from '../../types';
 
 const ReportsPage = () => {
-  const { reportData, courses, flashcards, refreshReportWeakPoints } = useAppStore();
+  const { reportData, courses, flashcards, refreshReportWeakPoints, refreshAllReportWeakPoints } = useAppStore();
   const [selectedCourseId, setSelectedCourseId] = useState<string>(reportData[0]?.courseId || '');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    refreshAllReportWeakPoints();
+  }, []);
 
   const selectedReport = reportData.find((r) => r.courseId === selectedCourseId);
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);

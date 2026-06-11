@@ -138,7 +138,13 @@ export const reportData: ReportData[] = [
 export const defaultSettings: Settings = {
   answerTone: 'friendly',
   contentFilterEnabled: true,
-  blockedKeywords: ['广告', '垃圾信息', '辱骂'],
+  blockedKeywords: (() => {
+    try {
+      const saved = localStorage.getItem('ai-assistant-blocked-keywords');
+      if (saved) return JSON.parse(saved) as string[];
+    } catch {}
+    return ['作弊', '代写', '抄袭'];
+  })(),
   autoAnswerEnabled: true,
   teacherName: '张老师',
 };

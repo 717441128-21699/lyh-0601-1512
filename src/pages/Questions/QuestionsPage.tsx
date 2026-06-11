@@ -23,6 +23,8 @@ import {
   FileText,
   ArrowLeftRight,
   BookOpen,
+  ChevronRight,
+  FileSearch,
 } from 'lucide-react';
 import type { AnswerTone, ChatMessage, MessageRole } from '../../types';
 
@@ -48,7 +50,20 @@ const QuestionsPage = () => {
   const [showToneSelector, setShowToneSelector] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'transferred'>('all');
   const [convertToast, setConvertToast] = useState(false);
+  const [expandedRefs, setExpandedRefs] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const toggleRef = (key: string) => {
+    setExpandedRefs((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const toneOptions: { value: AnswerTone; label: string; desc: string }[] = [
     { value: 'formal', label: '正式', desc: '专业严谨' },
@@ -145,45 +160,114 @@ const QuestionsPage = () => {
     }
   };
 
-  const renderMessage = (msg: ChatMessage) => {
+  const renderMessage = (msg: ChatMessage, allMessages: ChatMessage[]) => {
     const isRight = msg.role === 'teacher';
+    const hasNewRef = msg.role === 'ai' && msg.referenceDetails?.some((r) => r.isNew);
+    const prevAiMsgs = allMessages.filter(
+      (m) => m.role === 'ai' && m.id !== msg.id && allMessages.indexOf(m) < allMessages.indexOf(msg)
+    );
+    const showNewRefBanner = msg.role === 'ai' && hasNewRef && prevAiMsgs.length > 0;
+
     return (
-      <div key={msg.id} className={`flex gap-3 ${isRight ? 'flex-row-reverse' : ''}`}>
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${getRoleBg(msg.role)}`}>
-          {getRoleIcon(msg.role)}
-        </div>
-        <div className={`max-w-[75%] ${isRight ? 'text-right' : ''}`}>
-          <p className="text-xs text-slate-500 mb-1">
-            {getRoleName(msg.role, msg.authorName)}
-            <span className="ml-2">{formatDate(msg.createdAt)}</span>
-          </p>
-          <div
-            className={`p-4 rounded-xl ${
-              msg.role === 'teacher'
-                ? 'bg-primary-600 text-white'
-                : msg.role === 'ai'
-                  ? 'bg-white border border-slate-200'
-                  : 'bg-slate-100'
-            }`}
-          >
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
-            {msg.role === 'ai' && msg.references && msg.references.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-100">
-                <div className="flex items-start gap-2 text-xs text-primary-600">
-                  <BookOpen className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium mb-1 text-primary-700">📚 参考资料：</p>
-                    <ul className="space-y-1">
-                      {msg.references.map((ref, idx) => (
-                        <li key={idx} className="text-primary-600 bg-primary-50 px-2 py-1 rounded inline-flex mr-2 mb-1">
-                          《{ref}》
-                        </li>
-                      ))}
-                    </ul>
+      <div key={msg.id}>
+        {showNewRefBanner && (
+          <div className="flex items-center gap-2 py-2 px-3 mb-2 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-600">
+            <FileSearch className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>以下回答引用了新增课程资料</span>
+          </div>
+        )}
+        <div className={`flex gap-3 ${isRight ? 'flex-row-reverse' : ''}`}>
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${getRoleBg(msg.role)}`}>
+            {getRoleIcon(msg.role)}
+          </div>
+          <div className={`max-w-[75%] ${isRight ? 'text-right' : ''}`}>
+            <p className="text-xs text-slate-500 mb-1">
+              {getRoleName(msg.role, msg.authorName)}
+              <span className="ml-2">{formatDate(msg.createdAt)}</span>
+            </p>
+            <div
+              className={`relative p-4 rounded-xl ${
+                msg.role === 'teacher'
+                  ? 'bg-primary-600 text-white'
+                  : msg.role === 'ai'
+                    ? 'bg-white border border-slate-200'
+                    : 'bg-slate-100'
+              }`}
+            >
+              {hasNewRef && (
+                <span className="absolute top-2 right-2 px-2 py-0.5 bg-blue-500 text-white text-[10px] rounded-full leading-none">
+                  引用新资料
+                </span>
+              )}
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+              {msg.role === 'ai' && msg.referenceDetails && msg.referenceDetails.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-center gap-2 text-xs text-primary-600 mb-2">
+                    <BookOpen className="w-4 h-4 flex-shrink-0" />
+                    <span className="font-medium text-primary-700">📚 参考资料</span>
+                    <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded-full text-[10px] leading-none">
+                      {msg.referenceDetails.length}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {msg.referenceDetails.map((ref) => {
+                      const refKey = `${msg.id}-${ref.name}`;
+                      const isExpanded = expandedRefs.has(refKey);
+                      return (
+                        <div key={refKey} className="rounded-lg border border-slate-100 overflow-hidden">
+                          <button
+                            onClick={() => toggleRef(refKey)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            )}
+                            <span className="text-xs font-medium text-primary-700">《{ref.name}》</span>
+                            {ref.isNew && (
+                              <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 text-[10px] rounded-full leading-none">
+                                新资料
+                              </span>
+                            )}
+                          </button>
+                          {isExpanded && ref.excerpts.length > 0 && (
+                            <div className="px-3 pb-2 space-y-1.5">
+                              {ref.excerpts.map((excerpt, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-start gap-2 px-2.5 py-2 bg-slate-50 rounded-md"
+                                >
+                                  <span className="text-slate-400 text-xs mt-0.5 flex-shrink-0">📄</span>
+                                  <p className="text-xs text-slate-600 leading-relaxed">{excerpt}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+              {msg.role === 'ai' && !msg.referenceDetails && msg.references && msg.references.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-start gap-2 text-xs text-primary-600">
+                    <BookOpen className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium mb-1 text-primary-700">📚 参考资料：</p>
+                      <ul className="space-y-1">
+                        {msg.references.map((ref, idx) => (
+                          <li key={idx} className="text-primary-600 bg-primary-50 px-2 py-1 rounded inline-flex mr-2 mb-1">
+                            《{ref}》
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -400,7 +484,7 @@ const QuestionsPage = () => {
                     </div>
 
                     <div className="p-5 space-y-5 max-h-96 overflow-y-auto">
-                      {question.messages.map(renderMessage)}
+                      {question.messages.map((msg) => renderMessage(msg, question.messages))}
                       <div ref={messagesEndRef} />
                     </div>
 
