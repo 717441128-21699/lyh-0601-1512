@@ -1,4 +1,18 @@
-import type { Course } from '../types';
+import type { Course, CourseMaterial } from '../types';
+
+const makeMaterials = (courseId: string, names: { name: string; type: CourseMaterial['type']; status: CourseMaterial['status']; related: number }[]): CourseMaterial[] =>
+  names.map((m, i) => ({
+    id: `${courseId}-mat-${i}`,
+    courseId,
+    name: m.name,
+    type: m.type,
+    size: ['2.4 MB', '1.8 MB', '5.2 MB', '3.1 MB', '0.9 MB'][i % 5],
+    status: m.status,
+    uploadedAt: `2024-10-0${i + 1} 09:3${i}:00`,
+    processedAt: m.status === 'ready' ? `2024-10-0${i + 1} 10:0${i}:00` : undefined,
+    relatedQuestions: m.related,
+    progress: m.status === 'processing' ? 65 : m.status === 'uploading' ? 30 : 100,
+  }));
 
 export const courses: Course[] = [
   {
@@ -9,6 +23,12 @@ export const courses: Course[] = [
     studentCount: 45,
     progress: 72,
     materials: ['第1章 Python入门.pdf', '第2章 数据类型.pptx', '第3章 函数与模块.docx', '练习题库.xlsx'],
+    materialList: makeMaterials('c1', [
+      { name: '第1章 Python入门.pdf', type: 'pdf', status: 'ready', related: 12 },
+      { name: '第2章 数据类型.pptx', type: 'ppt', status: 'ready', related: 8 },
+      { name: '第3章 函数与模块.docx', type: 'doc', status: 'ready', related: 5 },
+      { name: '练习题库.xlsx', type: 'other', status: 'ready', related: 3 },
+    ]),
     createdAt: '2024-09-01',
     className: '编程一班',
   },
@@ -20,6 +40,11 @@ export const courses: Course[] = [
     studentCount: 38,
     progress: 55,
     materials: ['数据分析入门.pdf', 'Pandas实战指南.pdf', '可视化案例集.pptx'],
+    materialList: makeMaterials('c2', [
+      { name: '数据分析入门.pdf', type: 'pdf', status: 'ready', related: 15 },
+      { name: 'Pandas实战指南.pdf', type: 'pdf', status: 'ready', related: 20 },
+      { name: '可视化案例集.pptx', type: 'ppt', status: 'processing', related: 6 },
+    ]),
     createdAt: '2024-09-15',
     className: '数据分析班',
   },
@@ -31,6 +56,11 @@ export const courses: Course[] = [
     studentCount: 52,
     progress: 38,
     materials: ['HTML&CSS基础.pdf', 'JavaScript高级程序设计.pdf', 'React实战.pdf'],
+    materialList: makeMaterials('c3', [
+      { name: 'HTML&CSS基础.pdf', type: 'pdf', status: 'ready', related: 18 },
+      { name: 'JavaScript高级程序设计.pdf', type: 'pdf', status: 'ready', related: 25 },
+      { name: 'React实战.pdf', type: 'pdf', status: 'uploading', related: 0 },
+    ]),
     createdAt: '2024-10-01',
     className: '前端精英班',
   },
@@ -42,6 +72,11 @@ export const courses: Course[] = [
     studentCount: 30,
     progress: 25,
     materials: ['机器学习周志华.pdf', '算法推导笔记.docx', '实战项目代码.zip'],
+    materialList: makeMaterials('c4', [
+      { name: '机器学习周志华.pdf', type: 'pdf', status: 'ready', related: 10 },
+      { name: '算法推导笔记.docx', type: 'doc', status: 'ready', related: 7 },
+      { name: '实战项目代码.zip', type: 'other', status: 'failed', related: 0 },
+    ]),
     createdAt: '2024-10-10',
     className: 'AI 进阶班',
   },
@@ -53,6 +88,11 @@ export const courses: Course[] = [
     studentCount: 42,
     progress: 60,
     materials: ['数据库系统概论.pdf', 'SQL实战手册.pdf', '数据库设计规范.docx'],
+    materialList: makeMaterials('c5', [
+      { name: '数据库系统概论.pdf', type: 'pdf', status: 'ready', related: 14 },
+      { name: 'SQL实战手册.pdf', type: 'pdf', status: 'ready', related: 22 },
+      { name: '数据库设计规范.docx', type: 'doc', status: 'ready', related: 5 },
+    ]),
     createdAt: '2024-09-20',
     className: '数据库专修班',
   },
@@ -64,6 +104,11 @@ export const courses: Course[] = [
     studentCount: 35,
     progress: 45,
     materials: ['算法导论.pdf', 'LeetCode题解.pdf', '数据结构精讲.pptx'],
+    materialList: makeMaterials('c6', [
+      { name: '算法导论.pdf', type: 'pdf', status: 'ready', related: 16 },
+      { name: 'LeetCode题解.pdf', type: 'pdf', status: 'ready', related: 30 },
+      { name: '数据结构精讲.pptx', type: 'ppt', status: 'processing', related: 4 },
+    ]),
     createdAt: '2024-09-25',
     className: '算法集训班',
   },

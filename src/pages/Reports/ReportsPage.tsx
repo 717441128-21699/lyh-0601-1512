@@ -14,17 +14,30 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
+  Brain,
+  Target,
+  Layers,
 } from 'lucide-react';
 import { exportToText, copyToClipboard } from '../../utils/ai';
 import type { StudentProgress } from '../../types';
 
 const ReportsPage = () => {
-  const { reportData, courses } = useAppStore();
+  const { reportData, courses, flashcards, refreshReportWeakPoints } = useAppStore();
   const [selectedCourseId, setSelectedCourseId] = useState<string>(reportData[0]?.courseId || '');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const selectedReport = reportData.find((r) => r.courseId === selectedCourseId);
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
+
+  const courseFlashcards = flashcards.filter((f) => f.courseId === selectedCourseId);
+  const masteredCount = courseFlashcards.filter((f) => f.masteryLevel === 'mastered').length;
+  const learningCount = courseFlashcards.filter((f) => f.masteryLevel === 'learning').length;
+  const weakCount = courseFlashcards.filter((f) => f.masteryLevel === 'weak' || f.masteryLevel === 'not_started').length;
+
+  const handleCourseChange = (courseId: string) => {
+    setSelectedCourseId(courseId);
+    refreshReportWeakPoints(courseId);
+  };
 
   const handleCopySuggestion = async (student: StudentProgress) => {
     const text = exportToText(student, selectedCourse?.name || '');
@@ -48,6 +61,18 @@ const ReportsPage = () => {
     URL.revokeObjectURL(url);
   };
 
+  const getMasteryColor = (level: number) => {
+    if (level >= 4) return 'text-success-600';
+    if (level >= 2) return 'text-primary-600';
+    return 'text-warning-600';
+  };
+
+  const getMasteryLabel = (level: number) => {
+    if (level >= 4) return '已掌握';
+    if (level >= 2) return '学习中';
+    return '薄弱';
+  };
+
   return (
     <Layout title="班级报告">
       <div className="animate-slide-up">
@@ -63,7 +88,7 @@ const ReportsPage = () => {
           <div className="relative">
             <select
               value={selectedCourseId}
-              onChange={(e) => setSelectedCourseId(e.target.value)}
+              onChange={(e) => handleCourseChange(e.target.value)}
               className="appearance-none px-4 py-2.5 pr-10 bg-white border border-slate-200 rounded-lg text-sm font-medium
                          focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
             >
@@ -129,8 +154,8 @@ const ReportsPage = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <div className="card p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <div className="card p-6 lg:col-span-2">
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-warning-500" />
                   高频困惑统计
@@ -175,6 +200,75 @@ const ReportsPage = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="card p-6">
+                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-danger-500" />
+                  薄弱知识点
+                </h3>
+                <div className="space-y-3">
+                  {selectedReport.weakPoints.map((point, index) => (
+                    <div
+                      key={point}
+                      className="flex items-center gap-3 p-3 bg-danger-50 rounded-lg border border-danger-100"
+                    >
+                      <span className="w-7 h-7 bg-danger-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-slate-800">{point}</p>
+                        <p className="text-xs text-danger-600">需重点关注</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-slate-500">整体掌握度</span>
+                    <span className={`text-sm font-bold ${getMasteryColor(selectedReport.avgMastery)}`}>
+                      {selectedReport.avgMastery}%
+                    </span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${
+                        selectedReport.avgMastery >= 70
+                          ? 'bg-success-500'
+                          : selectedReport.avgMastery >= 40
+                          ? 'bg-primary-500'
+                          : 'bg-warning-500'
+                      }`}
+                      style={{ width: `${selectedReport.avgMastery}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="card p-6">
+                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-primary-500" />
+                  知识卡片掌握分布
+                </h3>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="p-4 bg-success-50 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-success-600">{masteredCount}</p>
+                    <p className="text-xs text-success-700">已掌握</p>
+                  </div>
+                  <div className="p-4 bg-primary-50 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-primary-600">{learningCount}</p>
+                    <p className="text-xs text-primary-700">学习中</p>
+                  </div>
+                  <div className="p-4 bg-warning-50 rounded-xl text-center">
+                    <p className="text-2xl font-bold text-warning-600">{weakCount}</p>
+                    <p className="text-xs text-warning-700">薄弱</p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">
+                  共 {courseFlashcards.length} 张知识卡片，掌握程度随练习和复习动态更新
+                </p>
               </div>
 
               <div className="card p-6">

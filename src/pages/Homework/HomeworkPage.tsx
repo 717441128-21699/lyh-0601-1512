@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout/Layout';
 import { useAppStore } from '../../store/useAppStore';
 import {
@@ -7,15 +7,16 @@ import {
   Users,
   TrendingUp,
   CheckCircle,
-  AlertCircle,
   Edit3,
   Sparkles,
   Send,
   X,
   ChevronRight,
   Search,
+  Award,
+  Calendar,
 } from 'lucide-react';
-import type { Homework, Submission } from '../../types';
+import type { Submission } from '../../types';
 
 const HomeworkPage = () => {
   const {
@@ -26,12 +27,14 @@ const HomeworkPage = () => {
     updateSubmissionComment,
     submitGrade,
     settings,
+    getHomeworkCompletionRate,
   } = useAppStore();
 
   const [selectedHomework, setSelectedHomework] = useState<string | null>(null);
-  const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [publishSuccess, setPublishSuccess] = useState(false);
 
   const filteredHomeworks = homeworks.filter(
     (h) =>
@@ -49,35 +52,43 @@ const HomeworkPage = () => {
     return s.status === filterStatus;
   });
 
+  const selectedSubmission = selectedSubmissionId
+    ? submissions.find((s) => s.id === selectedSubmissionId) || null
+    : null;
+
+  const completionRate = selectedHomework ? getHomeworkCompletionRate(selectedHomework) : 0;
+
+  const gradedCount = homeworkSubmissions.filter((s) => s.status === 'graded').length;
+  const avgScore =
+    gradedCount > 0
+      ? Math.round(
+          homeworkSubmissions
+            .filter((s) => s.score !== null)
+            .reduce((sum, s) => sum + (s.score || 0), 0) / gradedCount
+        )
+      : 0;
+
   const handleGenerateComment = (submissionId: string) => {
     generateCommentForSubmission(submissionId);
-    const updated = submissions.find((s) => s.id === submissionId);
-    if (updated) {
-      setSelectedSubmission({ ...updated });
-    }
   };
 
   const handleScoreChange = (score: number) => {
-    if (selectedSubmission) {
-      updateSubmissionScore(selectedSubmission.id, score);
-      setSelectedSubmission((prev) => (prev ? { ...prev, score } : prev));
+    if (selectedSubmissionId) {
+      updateSubmissionScore(selectedSubmissionId, score);
     }
   };
 
   const handleCommentChange = (comment: string) => {
-    if (selectedSubmission) {
-      updateSubmissionComment(selectedSubmission.id, comment);
-      setSelectedSubmission((prev) => (prev ? { ...prev, finalComment: comment } : prev));
+    if (selectedSubmissionId) {
+      updateSubmissionComment(selectedSubmissionId, comment);
     }
   };
 
   const handleSubmitGrade = () => {
-    if (selectedSubmission) {
-      submitGrade(selectedSubmission.id);
-      const updated = submissions.find((s) => s.id === selectedSubmission.id);
-      if (updated) {
-        setSelectedSubmission({ ...updated });
-      }
+    if (selectedSubmissionId) {
+      submitGrade(selectedSubmissionId);
+      setPublishSuccess(true);
+      setTimeout(() => setPublishSuccess(false), 2000);
     }
   };
 
@@ -109,20 +120,14 @@ const HomeworkPage = () => {
     }
   };
 
-  const completionRate = selectedHomeworkData
-    ? Math.round(
-        (selectedHomeworkData.submittedCount / selectedHomeworkData.totalCount) * 100
-      )
-    : 0;
+  const isGraded = selectedSubmission?.status === 'graded';
 
   return (
     <Layout title="作业批改">
-      <div className="animate-slide-up">
+      <div className="animate-slide-up relative">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-serif font-bold text-slate-800 mb-1">
-              作业批改
-            </h1>
+            <h1 className="text-2xl font-serif font-bold text-slate-800 mb-1">作业批改</h1>
             <p className="text-slate-500">
               共 {homeworks.length} 份作业，
               {submissions.filter((s) => s.status === 'submitted').length} 份待批改
@@ -146,65 +151,66 @@ const HomeworkPage = () => {
             </div>
 
             <div className="space-y-3">
-              {filteredHomeworks.map((homework) => (
-                <div
-                  key={homework.id}
-                  onClick={() => {
-                    setSelectedHomework(homework.id);
-                    setSelectedSubmission(null);
-                  }}
-                  className={`card p-4 cursor-pointer transition-all ${
-                    selectedHomework === homework.id
-                      ? 'ring-2 ring-primary-500 shadow-card-hover'
-                      : 'card-hover'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-slate-800 mb-1 line-clamp-1">
-                        {homework.title}
-                      </h3>
-                      <p className="text-xs text-slate-500">
-                        {homework.courseName}
-                      </p>
+              {filteredHomeworks.map((homework) => {
+                const hwCompletionRate = getHomeworkCompletionRate(homework.id);
+                const hwSubmissions = submissions.filter((s) => s.homeworkId === homework.id);
+                const hwGraded = hwSubmissions.filter((s) => s.status === 'graded').length;
+
+                return (
+                  <div
+                    key={homework.id}
+                    onClick={() => {
+                      setSelectedHomework(homework.id);
+                      setSelectedSubmissionId(null);
+                    }}
+                    className={`card p-4 cursor-pointer transition-all ${
+                      selectedHomework === homework.id
+                        ? 'ring-2 ring-primary-500 shadow-card-hover'
+                        : 'card-hover'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-medium text-slate-800 mb-1 line-clamp-1">
+                          {homework.title}
+                        </h3>
+                        <p className="text-xs text-slate-500">{homework.courseName}</p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
-                    <div className="flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>
-                        {homework.submittedCount}/{homework.totalCount} 已提交
+                    <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
+                      <div className="flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5" />
+                        <span>
+                          {hwGraded}/{hwSubmissions.length} 已批改
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>截止: {homework.dueDate}</span>
+                      </div>
+                    </div>
+                    <div className="progress-bar">
+                      <div
+                        className={`progress-fill ${
+                          hwCompletionRate >= 80
+                            ? 'bg-success-500'
+                            : hwCompletionRate >= 50
+                              ? 'bg-primary-500'
+                              : 'bg-warning-500'
+                        }`}
+                        style={{ width: `${hwCompletionRate}%` }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">完成率</span>
+                      <span className="text-xs font-semibold text-primary-600">
+                        {hwCompletionRate}%
                       </span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>截止: {homework.dueDate}</span>
-                    </div>
                   </div>
-                  <div className="progress-bar">
-                    <div
-                      className={`progress-fill ${
-                        completionRate >= 80
-                          ? 'bg-success-500'
-                          : completionRate >= 50
-                          ? 'bg-primary-500'
-                          : 'bg-warning-500'
-                      }`}
-                      style={{ width: `${completionRate}%` }}
-                    />
-                  </div>
-                  {homework.averageScore && (
-                    <div className="mt-3 flex items-center gap-2 text-xs">
-                      <TrendingUp className="w-4 h-4 text-success-600" />
-                      <span className="text-slate-600">平均分:</span>
-                      <span className="font-medium text-success-600">
-                        {homework.averageScore}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -216,15 +222,35 @@ const HomeworkPage = () => {
                     <h2 className="text-xl font-serif font-semibold text-slate-800 mb-1">
                       {selectedHomeworkData.title}
                     </h2>
-                    <p className="text-sm text-slate-500">
-                      {selectedHomeworkData.description}
-                    </p>
+                    <p className="text-sm text-slate-500">{selectedHomeworkData.description}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-slate-500 mb-1">完成率</p>
-                    <p className="text-2xl font-bold text-primary-700">
-                      {completionRate}%
-                    </p>
+                    <p className="text-sm text-slate-500 mb-1">批改完成率</p>
+                    <p className="text-2xl font-bold text-primary-700">{completionRate}%</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="bg-slate-50 rounded-xl p-4 text-center">
+                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Users className="w-5 h-5 text-primary-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-800">{homeworkSubmissions.length}</p>
+                    <p className="text-xs text-slate-500">提交总数</p>
+                  </div>
+                  <div className="bg-success-50 rounded-xl p-4 text-center">
+                    <div className="w-10 h-10 bg-success-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <CheckCircle className="w-5 h-5 text-success-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-success-700">{gradedCount}</p>
+                    <p className="text-xs text-slate-500">已完成</p>
+                  </div>
+                  <div className="bg-accent-50 rounded-xl p-4 text-center">
+                    <div className="w-10 h-10 bg-accent-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Award className="w-5 h-5 text-accent-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-accent-700">{avgScore || '-'}</p>
+                    <p className="text-xs text-slate-500">平均分</p>
                   </div>
                 </div>
 
@@ -234,20 +260,17 @@ const HomeworkPage = () => {
                     {
                       value: 'submitted',
                       label: '待批改',
-                      count: homeworkSubmissions.filter((s) => s.status === 'submitted')
-                        .length,
+                      count: homeworkSubmissions.filter((s) => s.status === 'submitted').length,
                     },
                     {
                       value: 'grading',
                       label: '批改中',
-                      count: homeworkSubmissions.filter((s) => s.status === 'grading')
-                        .length,
+                      count: homeworkSubmissions.filter((s) => s.status === 'grading').length,
                     },
                     {
                       value: 'graded',
                       label: '已完成',
-                      count: homeworkSubmissions.filter((s) => s.status === 'graded')
-                        .length,
+                      count: homeworkSubmissions.filter((s) => s.status === 'graded').length,
                     },
                   ].map((tab) => (
                     <button
@@ -260,9 +283,7 @@ const HomeworkPage = () => {
                       }`}
                     >
                       {tab.label}
-                      <span className="ml-1 text-xs opacity-70">
-                        ({tab.count})
-                      </span>
+                      <span className="ml-1 text-xs opacity-70">({tab.count})</span>
                     </button>
                   ))}
                 </div>
@@ -271,9 +292,9 @@ const HomeworkPage = () => {
                   {filteredSubmissions.map((submission) => (
                     <div
                       key={submission.id}
-                      onClick={() => setSelectedSubmission(submission)}
+                      onClick={() => setSelectedSubmissionId(submission.id)}
                       className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                        selectedSubmission?.id === submission.id
+                        selectedSubmissionId === submission.id
                           ? 'border-primary-500 bg-primary-50/50 shadow-md'
                           : 'border-slate-200 hover:border-primary-300 hover:shadow-sm'
                       }`}
@@ -284,12 +305,8 @@ const HomeworkPage = () => {
                             {submission.studentName[0]}
                           </div>
                           <div>
-                            <p className="font-medium text-slate-800">
-                              {submission.studentName}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              提交于 {submission.submittedAt}
-                            </p>
+                            <p className="font-medium text-slate-800">{submission.studentName}</p>
+                            <p className="text-xs text-slate-500">提交于 {submission.submittedAt}</p>
                           </div>
                         </div>
                         {getStatusBadge(submission.status)}
@@ -306,7 +323,7 @@ const HomeworkPage = () => {
                           <span className="text-slate-400 text-sm">未打分</span>
                         )}
                         <button className="text-sm text-primary-600 hover:text-primary-700 font-medium">
-                          查看详情 →
+                          {submission.status === 'graded' ? '查看批改 →' : '开始批改 →'}
                         </button>
                       </div>
                     </div>
@@ -323,9 +340,7 @@ const HomeworkPage = () => {
             ) : (
               <div className="card p-12 text-center">
                 <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-slate-700 mb-2">
-                  选择一份作业开始批改
-                </h3>
+                <h3 className="text-lg font-medium text-slate-700 mb-2">选择一份作业开始批改</h3>
                 <p className="text-slate-500 text-sm">
                   从左侧列表中选择作业，查看学员提交情况并进行批改
                 </p>
@@ -337,7 +352,7 @@ const HomeworkPage = () => {
         {selectedSubmission && (
           <div
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in"
-            onClick={() => setSelectedSubmission(null)}
+            onClick={() => setSelectedSubmissionId(null)}
           >
             <div
               className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden animate-slide-up flex flex-col"
@@ -352,15 +367,18 @@ const HomeworkPage = () => {
                     <h3 className="text-lg font-semibold text-slate-800">
                       {selectedSubmission.studentName}
                     </h3>
-                    <p className="text-sm text-slate-500">
-                      {selectedHomeworkData?.title}
-                    </p>
+                    <p className="text-sm text-slate-500">{selectedHomeworkData?.title}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   {getStatusBadge(selectedSubmission.status)}
+                  {isGraded && selectedSubmission.gradedAt && (
+                    <span className="text-xs text-slate-500">
+                      发布于 {selectedSubmission.gradedAt}
+                    </span>
+                  )}
                   <button
-                    onClick={() => setSelectedSubmission(null)}
+                    onClick={() => setSelectedSubmissionId(null)}
                     className="w-8 h-8 hover:bg-slate-100 rounded-full flex items-center justify-center transition-colors"
                   >
                     <X className="w-5 h-5 text-slate-500" />
@@ -375,7 +393,7 @@ const HomeworkPage = () => {
                       <FileText className="w-5 h-5 text-primary-600" />
                       作业内容
                     </h4>
-                    <div className="bg-slate-50 rounded-xl p-5 border border-slate-200">
+                    <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 h-full">
                       <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
                         {selectedSubmission.content}
                       </p>
@@ -384,98 +402,125 @@ const HomeworkPage = () => {
 
                   <div className="space-y-6">
                     <div>
-                      <h4 className="font-medium text-slate-700 mb-3">
-                        打分
-                      </h4>
+                      <h4 className="font-medium text-slate-700 mb-3">打分</h4>
                       <div className="flex items-center gap-4">
                         <input
                           type="range"
                           min="0"
                           max="100"
                           value={selectedSubmission.score ?? 0}
-                          onChange={(e) =>
-                            handleScoreChange(parseInt(e.target.value))
-                          }
-                          className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                          onChange={(e) => handleScoreChange(parseInt(e.target.value))}
+                          disabled={isGraded}
+                          className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
                         />
-                        <div className="w-20 h-14 bg-primary-50 rounded-xl flex items-center justify-center">
-                          <span className="text-2xl font-bold text-primary-700">
+                        <div
+                          className={`w-20 h-14 rounded-xl flex items-center justify-center ${
+                            isGraded ? 'bg-success-50' : 'bg-primary-50'
+                          }`}
+                        >
+                          <span
+                            className={`text-2xl font-bold ${
+                              isGraded ? 'text-success-700' : 'text-primary-700'
+                            }`}
+                          >
                             {selectedSubmission.score ?? 0}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <div>
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-medium text-slate-700 flex items-center gap-2">
-                          <Sparkles className="w-5 h-5 text-accent-500" />
-                          AI 评语草稿
-                        </h4>
-                        <button
-                          onClick={() =>
-                            handleGenerateComment(selectedSubmission.id)
-                          }
-                          className="text-sm text-accent-600 hover:text-accent-700 font-medium flex items-center gap-1"
-                        >
-                          <Sparkles className="w-4 h-4" />
-                          生成评语
-                        </button>
+                    {!isGraded && (
+                      <div>
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="font-medium text-slate-700 flex items-center gap-2">
+                            <Sparkles className="w-5 h-5 text-accent-500" />
+                            AI 评语草稿
+                          </h4>
+                          <button
+                            onClick={() => handleGenerateComment(selectedSubmission.id)}
+                            className="text-sm text-accent-600 hover:text-accent-700 font-medium flex items-center gap-1"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                            生成评语
+                          </button>
+                        </div>
+                        {selectedSubmission.commentDraft ? (
+                          <div className="bg-accent-50 rounded-xl p-4 border border-accent-200">
+                            <p className="text-sm text-slate-700 leading-relaxed">
+                              {selectedSubmission.commentDraft}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 rounded-xl p-6 text-center border border-dashed border-slate-200">
+                            <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                            <p className="text-sm text-slate-400">点击上方按钮生成 AI 评语草稿</p>
+                          </div>
+                        )}
                       </div>
-                      {selectedSubmission.commentDraft ? (
-                        <div className="bg-accent-50 rounded-xl p-4 border border-accent-200">
-                          <p className="text-sm text-slate-700 leading-relaxed">
-                            {selectedSubmission.commentDraft}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="bg-slate-50 rounded-xl p-6 text-center border border-dashed border-slate-200">
-                          <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                          <p className="text-sm text-slate-400">
-                            点击上方按钮生成 AI 评语草稿
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                    )}
 
                     <div>
                       <h4 className="font-medium text-slate-700 mb-3">
-                        最终评语
+                        {isGraded ? '最终评语' : '最终评语'}
                       </h4>
-                      <textarea
-                        value={selectedSubmission.finalComment || ''}
-                        onChange={(e) => handleCommentChange(e.target.value)}
-                        placeholder="输入评语内容，或使用 AI 生成的评语草稿..."
-                        rows={5}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl resize-none
-                                   focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                                   text-sm leading-relaxed"
-                      />
+                      {isGraded ? (
+                        <div className="bg-success-50 rounded-xl p-4 border border-success-200">
+                          <p className="text-sm text-slate-700 leading-relaxed">
+                            {selectedSubmission.finalComment || selectedSubmission.commentDraft}
+                          </p>
+                        </div>
+                      ) : (
+                        <textarea
+                          value={selectedSubmission.finalComment || ''}
+                          onChange={(e) => handleCommentChange(e.target.value)}
+                          placeholder="输入评语内容，或使用 AI 生成的评语草稿..."
+                          rows={5}
+                          className="w-full px-4 py-3 border border-slate-200 rounded-xl resize-none
+                                     focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                                     text-sm leading-relaxed"
+                        />
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="p-5 border-t border-slate-200 flex justify-end gap-3">
-                <button
-                  onClick={() => setSelectedSubmission(null)}
-                  className="btn-secondary"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleSubmitGrade}
-                  disabled={
-                    !selectedSubmission.finalComment &&
-                    !selectedSubmission.commentDraft
-                  }
-                  className="btn-primary flex items-center gap-2"
-                >
-                  <Send className="w-4 h-4" />
-                  发布批改
-                </button>
+              <div className="p-5 border-t border-slate-200 flex justify-between items-center">
+                {isGraded && (
+                  <div className="flex items-center gap-2 text-success-600">
+                    <CheckCircle className="w-5 h-5" />
+                    <span className="text-sm font-medium">批改已发布，学生可查看结果</span>
+                  </div>
+                )}
+                <div className="flex gap-3 ml-auto">
+                  <button
+                    onClick={() => setSelectedSubmissionId(null)}
+                    className="btn-secondary"
+                  >
+                    {isGraded ? '关闭' : '取消'}
+                  </button>
+                  {!isGraded && (
+                    <button
+                      onClick={handleSubmitGrade}
+                      disabled={
+                        !selectedSubmission.finalComment && !selectedSubmission.commentDraft
+                      }
+                      className="btn-primary flex items-center gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      发布批改
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {publishSuccess && (
+          <div className="fixed bottom-6 right-6 bg-success-500 text-white px-5 py-3 rounded-xl shadow-lg animate-slide-up flex items-center gap-2 z-50">
+            <CheckCircle className="w-5 h-5" />
+            批改已发布！
           </div>
         )}
       </div>
